@@ -70,11 +70,19 @@ def sync_tasks_to_google():
                 # CREAR EN CALENDARIO
                 event = {
                     'summary': f"📌 {tarea} ({row['Curso']})",
+                    'description': f"Tarea del curso {row['Curso']}. Estado: Pendiente.",
                     'start': {'dateTime': fecha_str},
                     'end': {'dateTime': (fecha_dt + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")},
+                    'reminders': {
+                        'useDefault': False,
+                        'overrides': [
+                            {'method': 'popup', 'minutes': 60},  # Notificación en pantalla
+                            {'method': 'email', 'minutes': 60}   # Correo electrónico (opcional)
+                        ],
+                    },
                 }
                 calendar.events().insert(calendarId='primary', body=event).execute()
-                log.append(f"📅 Calendario: Evento creado para '{tarea}'")
+                log.append(f"📅 Calendario: Evento + Recordatorio (60m) creado para '{tarea}'")
             else:
                 # ENVIAR GMAIL
                 if send_gmail_alert(gmail, tarea, row['Curso'], fecha_str):
