@@ -35,19 +35,25 @@ def get_google_services():
     return build('calendar', 'v3', credentials=creds), build('gmail', 'v1', credentials=creds)
 
 def send_gmail_alert(service, tarea, curso, fecha):
-    user_email = "me" # "me" es un alias para el usuario autenticado
+    destinatario = os.getenv("USER_EMAIL")
+    if not destinatario:
+        print("❌ Error: No se ha configurado USER_EMAIL en el archivo .env")
+        return False
+
     mensaje_texto = f"La tarea '{tarea}' del curso '{curso}' venció el {fecha}. Revisa el estado de entrega."
     
-    message = MIMEText(mensaje_texto)
-    message['to'] = os.getenv("USER_EMAIL", "tu_correo@gmail.com") # Configura esto en tu .env
+    message = MIMEText(mensaje_texto, 'plain', 'utf-8')
+    message['to'] = destinatario
+    message['from'] = 'me'
     message['subject'] = f"⚠️ ALERTA CRÍTICA: Tarea Vencida - {tarea}"
     
-    raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
+    # Codificación correcta para la API de Gmail
+    raw = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
     try:
         service.users().messages().send(userId='me', body={'raw': raw}).execute()
         return True
     except Exception as e:
-        print(f"Error enviando Gmail: {e}")
+        print(f"❌ Error enviando Gmail para '{tarea}': {e}")
         return False
 
 @mcp.tool()
