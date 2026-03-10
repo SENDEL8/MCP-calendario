@@ -1,71 +1,72 @@
-# MCP Google Calendar & Gmail Task Manager 🚀
+# Agente MCP: Gestor de Tareas Autónomo (Google AI + MCP) 🚀
 
-Este proyecto es un agente autónomo basado en el protocolo MCP (Model Context Protocol) que sincroniza tareas desde un archivo CSV con Google Calendar y envía alertas críticas por Gmail para tareas vencidas.
+Este proyecto es un agente inteligente basado en el **Google AI SDK** y el protocolo **MCP (Model Context Protocol)**. Su función es monitorear continuamente un archivo de tareas, sincronizarlas con **Google Calendar** y emitir alertas críticas vía **Gmail** de forma totalmente autónoma.
 
-## ✨ Características
+## ✨ Características Principales
 
-- **Sincronización Inteligente:** Clasifica tareas según su fecha de entrega y estado.
-- **Google Calendar:** Crea eventos para tareas pendientes con recordatorios automáticos (Pop-up y Email) **60 minutos** antes de la entrega.
-- **Alertas Críticas (Gmail):** Detecta tareas vencidas (`Fecha_Entrega < Hoy`) que no han sido entregadas y envía un correo de advertencia inmediato.
-- **Formato Estándar:** Compatible con fechas ISO-8601 (`YYYY-MM-DDTHH:MM:SSZ`).
-- **Servidor MCP:** Implementado con `FastMCP` para una integración sencilla con clientes como Claude Desktop, Cursor o Windsurf.
+- **🧠 Cerebro IA (Gemini 2.0 Flash):** Utiliza el SDK más reciente de Google Generative AI para analizar el estado de las tareas y decidir las acciones necesarias basándose en los mandatos de `GEMINI.md`.
+- **🔄 Monitoreo Continuo:** El agente revisa automáticamente el archivo de tareas cada **10 minutos** utilizando la librería `schedule`.
+- **📅 Sincronización de Calendario:** 
+  - Identifica tareas "Pendientes" con fecha de entrega futura.
+  - Crea eventos automáticamente con títulos descriptivos y detalles del curso.
+  - Configura **recordatorios (Pop-up)** 60 minutos antes de cada entrega.
+- **⚠️ Alertas Críticas (Gmail):** 
+  - Detecta tareas no entregadas que ya vencieron o que vencen en menos de 60 minutos.
+  - Envía correos de advertencia inmediatos al usuario configurado.
+- **🛠️ Arquitectura MCP:** Separa la lógica de decisión (IA) de la ejecución de herramientas (Google APIs) mediante el servidor `mcp_server.py`.
 
 ## 🛠️ Requisitos Previos
 
-1. **Google Cloud Console:** 
-Para que el script tenga permiso de escribir en tu calendario, debes:
-   1. Ir a Google Cloud Console (https://console.cloud.google.com/).
-   2. Crear un proyecto nuevo.
-   3. Habilitar Google Calendar API y Gmail API.
-   4. En "Credentials", crear un OAuth 2.0 Client ID (tipo "Desktop App").
-   5. Descargar el archivo JSON de credenciales y guardarlo en la carpeta del proyecto como credentials.json.
-2. **Python 3.10+** e instalación de dependencias:
+1.  **Google AI Studio:** Obtén una `GOOGLE_API_KEY` en [aistudio.google.com](https://aistudio.google.com/).
+2.  **Google Cloud Console:**
+    - Habilita las APIs de **Google Calendar** y **Gmail**.
+    - Crea credenciales de tipo **OAuth 2.0 Client ID (Desktop App)**.
+    - Descarga el archivo JSON y renombralo como `credentials.json` en la raíz del proyecto.
+3.  **Python 3.10+**
 
-# Crear entorno virtual
-python -m venv .venv
-# Activar entorno (Windows)
-.venv\Scripts\activate  
-# Instalar dependencias
-   ```bash
-   pip install -r requirements.txt
-   ```
-3. **Archivo `.env`:** Configura tu correo para recibir las alertas:
-   ```env
-   GOOGLE_API_KEY=tu_api_key_de_google_ai_studio
-   USER_EMAIL=tu_correo@gmail.com
-   ```
+## 🚀 Instalación y Configuración
 
-## 🚀 Uso
+1.  **Clonar y preparar entorno:**
+    ```bash
+    # Crear entorno virtual
+    python -m venv .venv
+    # Activar (Windows)
+    .venv\Scripts\activate
+    # Instalar dependencias
+    pip install -r requirements.txt
+    ```
 
-### 1. Preparar los datos (`data/tareas.csv`)
-Edita el archivo CSV con tus tareas siguiendo este formato:
-```csv
-Tarea,Curso,Fecha_Entrega,Estado
-Proyecto Final,Sistemas AI,2026-03-15T10:00:00Z,Pendiente
-Examen Parcial,Bases de Datos,2026-03-01T09:00:00Z,Pendiente
-```
+2.  **Configurar Variables de Entorno (`.env`):**
+    Crea un archivo `.env` basado en `.env.example`:
+    ```env
+    GOOGLE_API_KEY=tu_api_key_aquí
+    USER_EMAIL=tu_correo@gmail.com
+    ```
 
-### 2. Autenticación Inicial y Sincronización Directa
-La primera vez que ejecutes el script, se abrirá el navegador para autorizar el acceso a tu cuenta de Google:
-```bash
-python mcp_server.py --sync
-```
-Esto generará un archivo `token.pickle` para sesiones futuras.
+## 📋 Cómo Usar
 
-### 3. Ejecutar como Servidor MCP
-Para usarlo como herramienta dentro de un cliente MCP:
-```bash
-python mcp_server.py
-```
+1.  **Preparar Tareas (`data/tareas.csv`):**
+    Asegúrate de que tus tareas tengan el formato correcto (Fechas en ISO-8601):
+    ```csv
+    Tarea,Curso,Fecha_Entrega,Estado
+    Proyecto Final,Sistemas AI,2026-03-13T18:00:00Z,Pendiente
+    Revisión Tesis,Investigación,2026-03-10T15:00:00Z,Pendiente
+    ```
+
+2.  **Ejecutar el Agente Autónomo:**
+    Inicia el script principal. La primera vez se abrirá el navegador para autorizar el acceso a Google:
+    ```bash
+    python main.py
+    ```
+    *El agente quedará activo revisando cada 10 minutos.*
 
 ## 📂 Estructura del Proyecto
 
-- `mcp_server.py`: El núcleo del agente (Servidor MCP + Lógica de Google APIs).
-- `data/tareas.csv`: Base de datos local de tareas.
-- `GEMINI.md`: Instrucciones lógicas del agente para el modelo de IA.
-- `main.py`: Script de simulación y análisis de tareas vía IA.
-- `credentials.json`: (Tuyo) Credenciales de Google Cloud.
-- `token.pickle`: (Generado) Token de acceso a tu cuenta de Google.
+-   **`main.py`**: El cerebro autónomo. Orquestador que usa la IA y el planificador.
+-   **`mcp_server.py`**: El ejecutor de herramientas. Contiene las funciones para Google Calendar y Gmail.
+-   **`GEMINI.md`**: Los mandatos y reglas de negocio que sigue la IA.
+-   **`data/tareas.csv`**: Tu base de datos local de tareas.
+-   **`token.pickle`**: (Generado) Credenciales de sesión de Google persistentes.
 
 ---
-*Desarrollado como un prototipo funcional para la gestión autónoma de tareas académicas y profesionales.*
+*Desarrollado como una solución autónoma para la gestión inteligente de plazos y entregas.*
