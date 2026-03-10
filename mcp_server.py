@@ -4,10 +4,14 @@ import pickle
 import base64
 from datetime import datetime, timezone, timedelta
 from email.mime.text import MIMEText
+from dotenv import load_dotenv
 from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from mcp.server.fastmcp import FastMCP
+
+# Cargar variables de entorno
+load_dotenv()
 
 # Configuración de Google API
 SCOPES = [
@@ -72,8 +76,10 @@ def sync_tasks_to_google():
         estado = str(row['Estado']).strip().lower()
 
         if estado == "pendiente":
+            print(f"🔍 Analizando '{tarea}': Fecha entrega {fecha_dt}, Ahora {ahora}")
             if fecha_dt > ahora:
-                # CREAR EN CALENDARIO
+                print(f"📅 Programando en Calendario...")
+                # ... rest of calendar logic ...
                 event = {
                     'summary': f"📌 {tarea} ({row['Curso']})",
                     'description': f"Tarea del curso {row['Curso']}. Estado: Pendiente.",
@@ -82,17 +88,20 @@ def sync_tasks_to_google():
                     'reminders': {
                         'useDefault': False,
                         'overrides': [
-                            {'method': 'popup', 'minutes': 60},  # Notificación en pantalla
-                            {'method': 'email', 'minutes': 60}   # Correo electrónico (opcional)
+                            {'method': 'popup', 'minutes': 60},
+                            {'method': 'email', 'minutes': 60}
                         ],
                     },
                 }
                 calendar.events().insert(calendarId='primary', body=event).execute()
                 log.append(f"📅 Calendario: Evento + Recordatorio (60m) creado para '{tarea}'")
             else:
-                # ENVIAR GMAIL
+                print(f"🚨 Tarea vencida detectada. Intentando enviar Gmail...")
                 if send_gmail_alert(gmail, tarea, row['Curso'], fecha_str):
+                    print("✅ Gmail enviado exitosamente.")
                     log.append(f"📧 Gmail: Alerta enviada para '{tarea}'")
+                else:
+                    print("❌ Falló el envío de Gmail.")
 
     return "\n".join(log) if log else "Nada que sincronizar."
 
