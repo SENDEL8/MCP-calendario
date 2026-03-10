@@ -76,10 +76,24 @@ def sync_tasks_to_google():
         estado = str(row['Estado']).strip().lower()
 
         if estado == "pendiente":
-            print(f"🔍 Analizando '{tarea}': Fecha entrega {fecha_dt}, Ahora {ahora}")
-            if fecha_dt > ahora:
-                print(f"📅 Programando en Calendario...")
-                # ... rest of calendar logic ...
+            # Calcular la diferencia de tiempo
+            tiempo_restante = fecha_dt - ahora
+            minutos_restantes = tiempo_restante.total_seconds() / 60
+
+            # 1. Procesar SOLO tareas que están por venir
+            if minutos_restantes > 0:
+                print(f"🔍 Analizando '{tarea}': Faltan {minutos_restantes:.1f} minutos.")
+
+                # Alerta Crítica Gmail: Solo si faltan 60 minutos o menos para la entrega
+                if minutos_restantes <= 60:
+                    print(f"🚨 ¡ALERTA CRÍTICA! Faltan menos de 60 min. Enviando Gmail...")
+                    if send_gmail_alert(gmail, tarea, row['Curso'], fecha_str):
+                        log.append(f"📧 Gmail: Alerta enviada para '{tarea}'")
+                    else:
+                        log.append(f"❌ Gmail: Error al enviar para '{tarea}'")
+
+                # Google Calendar: Crear evento con recordatorio de 30 min
+                print(f"📅 Programando en Calendario (Recordatorio 30m)...")
                 event = {
                     'summary': f"📌 {tarea} ({row['Curso']})",
                     'description': f"Tarea del curso {row['Curso']}. Estado: Pendiente.",
@@ -88,20 +102,14 @@ def sync_tasks_to_google():
                     'reminders': {
                         'useDefault': False,
                         'overrides': [
-                            {'method': 'popup', 'minutes': 60},
-                            {'method': 'email', 'minutes': 60}
+                            {'method': 'popup', 'minutes': 30},
                         ],
                     },
                 }
                 calendar.events().insert(calendarId='primary', body=event).execute()
-                log.append(f"📅 Calendario: Evento + Recordatorio (60m) creado para '{tarea}'")
+                log.append(f"📅 Calendario: Evento creado para '{tarea}'")
             else:
-                print(f"🚨 Tarea vencida detectada. Intentando enviar Gmail...")
-                if send_gmail_alert(gmail, tarea, row['Curso'], fecha_str):
-                    print("✅ Gmail enviado exitosamente.")
-                    log.append(f"📧 Gmail: Alerta enviada para '{tarea}'")
-                else:
-                    print("❌ Falló el envío de Gmail.")
+                print(f"⏩ Omitiendo '{tarea}': Ya pasó la hora de entrega.")
 
     return "\n".join(log) if log else "Nada que sincronizar."
 
