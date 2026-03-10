@@ -63,7 +63,10 @@ def create_calendar_event(tarea: str, curso: str, fecha_iso: str):
             'end': {'dateTime': (fecha_dt + timedelta(hours=1)).isoformat().replace('+00:00', 'Z')},
             'reminders': {
                 'useDefault': False,
-                'overrides': [{'method': 'popup', 'minutes': 60}],
+                'overrides': [
+                    {'method': 'popup', 'minutes': 60},
+                    {'method': 'email', 'minutes': 60},
+                ],
             },
         }
         calendar.events().insert(calendarId='primary', body=event).execute()
