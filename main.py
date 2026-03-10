@@ -1,6 +1,8 @@
 import os
 import json
 import pandas as pd
+import schedule
+import time
 from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
 from google import genai
@@ -17,6 +19,7 @@ client = genai.Client(api_key=api_key)
 MODEL_ID = "gemini-2.5-flash"
 
 def run_agent():
+    print(f"\n--- REVISIÓN INICIADA: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ---")
     print(f"🤖 Agente Maestro ({MODEL_ID}) - Procesando...")
     ahora_dt = datetime.now(timezone.utc)
     ahora_iso = ahora_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -96,6 +99,19 @@ def run_agent():
 
     except Exception as e:
         print(f"❌ Error en ejecución: {e}")
+    
+    print(f"--- REVISIÓN FINALIZADA ---")
+    print("💤 Esperando 10 minutos para la próxima revisión...\n")
 
 if __name__ == "__main__":
+    # Programar la revisión cada 10 minutos
+    schedule.every(10).minutes.do(run_agent)
+    
+    print("🚀 Agente de Monitoreo Activo (Cada 10 minutos)")
+    # Ejecutar una vez al inicio para no esperar 10 min la primera vez
     run_agent()
+    
+    # Bucle infinito para mantener el script corriendo
+    while True:
+        schedule.run_pending()
+        time.sleep(1)
