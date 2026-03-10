@@ -1,3 +1,7 @@
 google-genai
 python-dotenv
 pandas
+mcp
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib

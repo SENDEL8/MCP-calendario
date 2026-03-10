@@ -128,3 +128,30 @@ dmypy.json
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Additional patterns for MCP-calendar project
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Backup files
+*.bak
+*.backup
+
+# Sensitive data (if generated)
+data/temp_*.csv
+
+# API keys or secrets
+secrets.py
+config.py
+credentials.json
+token.pickle
