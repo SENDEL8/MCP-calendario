@@ -114,9 +114,20 @@ def sync_tasks_to_google():
     return "\n".join(log) if log else "Nada que sincronizar."
 
 if __name__ == "__main__":
-    # Si se corre directo, ejecuta la sincronización para probar
     import sys
+    import time
+    
     if len(sys.argv) > 1 and sys.argv[1] == "--sync":
         print(sync_tasks_to_google())
+    elif len(sys.argv) > 1 and sys.argv[1] == "--watch":
+        print("🕵️ Modo Vigilancia Activado. Presiona Ctrl+C para detener.")
+        print("El agente revisará el CSV cada 10 minutos...")
+        try:
+            while True:
+                resultado = sync_tasks_to_google()
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] {resultado}")
+                time.sleep(600) # Esperar 10 minutos (600 segundos)
+        except KeyboardInterrupt:
+            print("\n🛑 Vigilancia detenida.")
     else:
         mcp.run()
