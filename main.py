@@ -1,104 +1,99 @@
 import os
-import time
+import json
 import pandas as pd
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
-# Importar las herramientas locales del servidor MCP
+# Importar herramientas locales
 import mcp_server
 
-# Cargar configuración
 load_dotenv()
 api_key = os.getenv("GOOGLE_API_KEY")
 
-# 1. Configurar el Cliente de Gemini
 client = genai.Client(api_key=api_key)
-# Usaremos 2.0-flash-lite que tiene mejores límites de cuota
-MODEL_ID = "gemini-2.5-flash" 
-
-# Herramientas para la IA
-tools_list = [
-    mcp_server.create_calendar_event,
-    mcp_server.send_critical_email
-]
+# Forzamos 1.5-flash para evitar errores de cuota y mayor estabilidad en JSON
+MODEL_ID = "gemini-2.5-flash"
 
 def run_agent():
-    print(f"🤖 Iniciando Agente Regulado ({MODEL_ID})...")
-    ahora = datetime.now(timezone.utc)
-    print(f"🕒 Fecha Actual: {ahora.isoformat()}")
+    print(f"🤖 Agente Maestro ({MODEL_ID}) - Procesando...")
+    ahora_dt = datetime.now(timezone.utc)
+    ahora_iso = ahora_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+    limite_60m_iso = (ahora_dt + timedelta(minutes=60)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    
+    print(f"🕒 Fecha Actual: {ahora_iso}")
+    print(f"🔔 Ventana Gmail (hasta): {limite_60m_iso}")
 
-    # Cargar instrucciones de GEMINI.md
-    try:
-        with open("GEMINI.md", "r", encoding="utf-8") as f:
-            system_instruction = f.read()
-    except:
-        system_instruction = "Eres un gestor de tareas. Decide si crear evento en Calendar o enviar Gmail."
-
-    # Leer el CSV localmente
     try:
         df = pd.read_csv("data/tareas.csv")
+        with open("GEMINI.md", "r", encoding="utf-8") as f:
+            instrucciones = f.read()
     except Exception as e:
-        print(f"❌ Error leyendo CSV: {e}")
+        print(f"❌ Error archivos: {e}")
         return
 
-    print(f"📋 Encontradas {len(df)} tareas. Procesando con pausas de seguridad...")
+    # Prompt ULTRA-ESTRICTO para el formato JSON
+    prompt = f"""
+    INSTRUCCIONES:
+    {instrucciones}
 
-    for index, row in df.iterrows():
-        tarea = row['Tarea']
-        print(f"\n👉 Procesando [{index+1}/{len(df)}]: {tarea}...")
+    DATOS (CSV):
+    {df.to_csv(index=False)}
 
-        prompt = f"""
-        Tarea: {tarea}
-        Curso: {row['Curso']}
-        Fecha de Entrega: {row['Fecha_Entrega']}
-        Estado Actual: {row['Estado']}
-        Fecha Actual: {ahora.isoformat()}
+    CONTEXTO TEMPORAL:
+    - Ahora: {ahora_iso}
+    - Límite Alerta (60 min): {limite_60m_iso}
 
-        Sigue tus mandatos de GEMINI.md. Si la tarea está 'Pendiente' y es a futuro, usa 'create_calendar_event'.
-        Si la fecha ya pasó y no está 'Entregado', usa 'send_critical_email'.
-        Si ya está 'Entregado', no hagas nada.
-        """
+    TAREA DE LA IA:
+    Genera un plan de acciones.
+    1. Si Estado != 'Entregado' Y Fecha_Entrega <= '{limite_60m_iso}' -> herramienta: 'send_critical_email'
+    2. Si Estado == 'Pendiente' Y Fecha_Entrega > '{limite_60m_iso}' -> herramienta: 'create_calendar_event'
 
-        try:
-            # Enviar tarea a la IA
-            response = client.models.generate_content(
-                model=MODEL_ID,
-                config=types.GenerateContentConfig(
-                    system_instruction=system_instruction,
-                    tools=tools_list,
-                    automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=False)
-                ),
-                contents=prompt
-            )
+    RESPUESTA REQUERIDA (JSON ESTRICTO):
+    {{
+        "acciones": [
+            {{
+                "herramienta": "nombre_de_la_herramienta",
+                "parametros": {{ "tarea": "...", "curso": "...", "fecha_iso": "..." }}
+            }}
+        ]
+    }}
+    * IMPORTANTE: En 'send_critical_email', el parámetro de fecha debe llamarse 'fecha'.
+    """
+
+    try:
+        response = client.models.generate_content(
+            model=MODEL_ID,
+            contents=prompt,
+            config=types.GenerateContentConfig(response_mime_type="application/json")
+        )
+        
+        datos = json.loads(response.text)
+        acciones = datos.get("acciones", [])
+
+        if not acciones:
+            print("✅ No se detectaron acciones necesarias.")
+            return
+
+        for accion in acciones:
+            nombre = accion.get("herramienta")
+            params = accion.get("parametros", {})
+            tarea = params.get("tarea", "Tarea")
+
+            if nombre == "create_calendar_event":
+                print(f"📅 Programando Calendario: {tarea}...")
+                print(f"   👉 {mcp_server.create_calendar_event(**params)}")
             
-            # Verificar si hubo llamadas a funciones
-            executed_any = False
-            if response.candidates:
-                for part in response.candidates[0].content.parts:
-                    if part.function_call:
-                        print(f"🛠️ IA llamó a la herramienta: {part.function_call.name}")
-                        executed_any = True
-            
-            if response.text:
-                print(f"🤖 IA responde: {response.text.strip()}")
-            elif not executed_any:
-                print("ℹ️ IA decidió no realizar ninguna acción para esta tarea.")
+            elif nombre == "send_critical_email":
+                print(f"📧 ENVIANDO ALERTA GMAIL: {tarea}...")
+                # Ajustar nombre de parámetro si la IA se equivoca entre 'fecha' y 'fecha_iso'
+                if "fecha_iso" in params and "fecha" not in params:
+                    params["fecha"] = params.pop("fecha_iso")
+                print(f"   👉 {mcp_server.send_critical_email(**params)}")
 
-            # PAUSA DE SEGURIDAD EXTENDIDA
-            if index < len(df) - 1:
-                print("⏳ Esperando 20 segundos para liberar cuota API...")
-                time.sleep(20)
-
-        except Exception as e:
-            if "429" in str(e):
-                print(f"⚠️ Error 429: Cuota excedida para '{tarea}'. Saltando a la siguiente...")
-                time.sleep(30) # Pausa larga si hay error
-            else:
-                print(f"❌ Error inesperado: {e}")
-
-    print("\n--- ✅ Proceso de tareas finalizado ---")
+    except Exception as e:
+        print(f"❌ Error en ejecución: {e}")
 
 if __name__ == "__main__":
     run_agent()
