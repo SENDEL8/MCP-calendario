@@ -10,7 +10,7 @@ Este archivo define la lógica central para el agente autónomo encargado de sin
 
 2. **Sincronización de Calendario:**
    - Identificar tareas con `Estado == "Pendiente"`.
-   - Si la fecha de entrega es **futura** (falta más de 60 minutos), crear un evento en **Google Calendar** con:
+   - Si la fecha de entrega es **futura** (mayor a `Ahora`), crear un evento en **Google Calendar** con:
      - Título: `[Tarea] {Tarea} - {Curso}`
      - Descripción: `Curso: {Curso}. Estado: Pendiente.`
      - Fecha/Hora de inicio: `{Fecha_Entrega}`
@@ -35,6 +35,6 @@ Este archivo define la lógica central para el agente autónomo encargado de sin
 
 1. Leer `data/tareas.csv`.
 2. Para cada fila:
-   - Validar estado y tiempo restante.
-   - Si falta <= 60 min o ya venció: **Priorizar Gmail**.
-   - Si falta > 60 min: **Crear Calendario**.
+   - **Calendario:** Si la tarea es `Pendiente` y su fecha de entrega es **futura**, crear evento.
+   - **Gmail:** Si la tarea no ha sido entregada y faltan <= 60 min o ya venció, enviar alerta.
+   - *Nota: Una tarea puede disparar ambas acciones si es futura y falta menos de 60 min.*

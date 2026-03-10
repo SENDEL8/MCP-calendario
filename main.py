@@ -46,9 +46,11 @@ def run_agent():
     - Límite Alerta (60 min): {limite_60m_iso}
 
     TAREA DE LA IA:
-    Genera un plan de acciones.
-    1. Si Estado != 'Entregado' Y Fecha_Entrega <= '{limite_60m_iso}' -> herramienta: 'send_critical_email'
-    2. Si Estado == 'Pendiente' Y Fecha_Entrega > '{limite_60m_iso}' -> herramienta: 'create_calendar_event'
+    Genera un plan de acciones siguiendo estas reglas:
+    1. **Calendario:** Si `Estado == 'Pendiente'` Y `Fecha_Entrega > '{ahora_iso}'` -> herramienta: 'create_calendar_event'.
+    2. **Gmail:** Si `Estado != 'Entregado'` Y `Fecha_Entrega <= '{limite_60m_iso}'` -> herramienta: 'send_critical_email'.
+
+    *Nota: Una misma tarea puede disparar ambas herramientas si es futura y falta menos de 60 minutos.*
 
     RESPUESTA REQUERIDA (JSON ESTRICTO):
     {{
