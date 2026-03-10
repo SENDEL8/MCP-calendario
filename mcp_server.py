@@ -19,18 +19,20 @@ SCOPES = [
     'https://www.googleapis.com/auth/gmail.send'
 ]
 
-mcp = FastMCP("Google Tasks Agent")
+mcp = FastMCP("Google Tasks Toolset")
 
 def get_google_services():
     creds = None
     if os.path.exists('token.pickle'):
         with open('token.pickle', 'rb') as token:
             creds = pickle.load(token)
-    
+
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
+            if not os.path.exists('credentials.json'):
+                raise FileNotFoundError("Error: 'credentials.json' no encontrado.")
             flow = InstalledAppFlow.from_client_secrets_file('credentials.json', SCOPES)
             creds = flow.run_local_server(port=0)
         with open('token.pickle', 'wb') as token:
@@ -38,96 +40,55 @@ def get_google_services():
 
     return build('calendar', 'v3', credentials=creds), build('gmail', 'v1', credentials=creds)
 
-def send_gmail_alert(service, tarea, curso, fecha):
-    destinatario = os.getenv("USER_EMAIL")
-    if not destinatario:
-        print("❌ Error: No se ha configurado USER_EMAIL en el archivo .env")
-        return False
-
-    mensaje_texto = f"La tarea '{tarea}' del curso '{curso}' venció el {fecha}. Revisa el estado de entrega."
-    
-    message = MIMEText(mensaje_texto, 'plain', 'utf-8')
-    message['to'] = destinatario
-    message['from'] = 'me'
-    message['subject'] = f"⚠️ ALERTA CRÍTICA: Tarea Vencida - {tarea}"
-    
-    # Codificación correcta para la API de Gmail
-    raw = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
+@mcp.tool()
+def read_tasks_from_csv() -> str:
+    """Lee el archivo data/tareas.csv y devuelve el contenido como string."""
     try:
-        service.users().messages().send(userId='me', body={'raw': raw}).execute()
-        return True
+        df = pd.read_csv("data/tareas.csv")
+        return df.to_string()
     except Exception as e:
-        print(f"❌ Error enviando Gmail para '{tarea}': {e}")
-        return False
+        return f"Error leyendo CSV: {e}"
 
 @mcp.tool()
-def sync_tasks_to_google():
-    """Sincroniza tareas del CSV con Google Calendar y Gmail."""
-    print("🔄 Iniciando sincronización real...")
-    calendar, gmail = get_google_services()
-    df = pd.read_csv("data/tareas.csv")
-    ahora = datetime.now(timezone.utc)
-    log = []
+def create_calendar_event(tarea: str, curso: str, fecha_iso: str):
+    """Crea un evento en Google Calendar con un recordatorio de 60 minutos."""
+    try:
+        calendar, _ = get_google_services()
+        fecha_dt = datetime.fromisoformat(fecha_iso.replace('Z', '+00:00'))
+        
+        event = {
+            'summary': f"[Tarea] {tarea} - {curso}",
+            'description': f"Curso: {curso}. Estado: Pendiente.",
+            'start': {'dateTime': fecha_iso},
+            'end': {'dateTime': (fecha_dt + timedelta(hours=1)).isoformat().replace('+00:00', 'Z')},
+            'reminders': {
+                'useDefault': False,
+                'overrides': [{'method': 'popup', 'minutes': 60}],
+            },
+        }
+        calendar.events().insert(calendarId='primary', body=event).execute()
+        return f"✅ Evento creado para: {tarea}"
+    except Exception as e:
+        return f"❌ Error en Calendario: {e}"
 
-    for _, row in df.iterrows():
-        tarea = row['Tarea']
-        fecha_str = row['Fecha_Entrega']
-        fecha_dt = datetime.strptime(fecha_str, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
-        estado = str(row['Estado']).strip().lower()
+@mcp.tool()
+def send_critical_email(tarea: str, curso: str, fecha: str):
+    """Envía un correo de alerta crítica vía Gmail."""
+    try:
+        _, gmail = get_google_services()
+        destinatario = os.getenv("USER_EMAIL")
+        if not destinatario: return "Error: USER_EMAIL no configurado."
 
-        if estado == "pendiente":
-            # Calcular la diferencia de tiempo
-            tiempo_restante = fecha_dt - ahora
-            minutos_restantes = tiempo_restante.total_seconds() / 60
-
-            # 1. Procesar SOLO tareas que están por venir
-            if minutos_restantes > 0:
-                print(f"🔍 Analizando '{tarea}': Faltan {minutos_restantes:.1f} minutos.")
-
-                # Alerta Crítica Gmail: Solo si faltan 60 minutos o menos para la entrega
-                if minutos_restantes <= 60:
-                    print(f"🚨 ¡ALERTA CRÍTICA! Faltan menos de 60 min. Enviando Gmail...")
-                    if send_gmail_alert(gmail, tarea, row['Curso'], fecha_str):
-                        log.append(f"📧 Gmail: Alerta enviada para '{tarea}'")
-                    else:
-                        log.append(f"❌ Gmail: Error al enviar para '{tarea}'")
-
-                # Google Calendar: Crear evento con recordatorio de 30 min
-                print(f"📅 Programando en Calendario (Recordatorio 30m)...")
-                event = {
-                    'summary': f"📌 {tarea} ({row['Curso']})",
-                    'description': f"Tarea del curso {row['Curso']}. Estado: Pendiente.",
-                    'start': {'dateTime': fecha_str},
-                    'end': {'dateTime': (fecha_dt + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")},
-                    'reminders': {
-                        'useDefault': False,
-                        'overrides': [
-                            {'method': 'popup', 'minutes': 30},
-                        ],
-                    },
-                }
-                calendar.events().insert(calendarId='primary', body=event).execute()
-                log.append(f"📅 Calendario: Evento creado para '{tarea}'")
-            else:
-                print(f"⏩ Omitiendo '{tarea}': Ya pasó la hora de entrega.")
-
-    return "\n".join(log) if log else "Nada que sincronizar."
+        body = f"La tarea '{tarea}' del curso '{curso}' tiene fecha de entrega {fecha} y aún no ha sido entregada."
+        message = MIMEText(body)
+        message['to'] = destinatario
+        message['subject'] = f"⚠️ ALERTA CRÍTICA: Tarea Vencida - {tarea}"
+        
+        raw = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
+        gmail.users().messages().send(userId='me', body={'raw': raw}).execute()
+        return f"📧 Alerta enviada para: {tarea}"
+    except Exception as e:
+        return f"❌ Error en Gmail: {e}"
 
 if __name__ == "__main__":
-    import sys
-    import time
-    
-    if len(sys.argv) > 1 and sys.argv[1] == "--sync":
-        print(sync_tasks_to_google())
-    elif len(sys.argv) > 1 and sys.argv[1] == "--watch":
-        print("🕵️ Modo Vigilancia Activado. Presiona Ctrl+C para detener.")
-        print("El agente revisará el CSV cada 10 minutos...")
-        try:
-            while True:
-                resultado = sync_tasks_to_google()
-                print(f"[{datetime.now().strftime('%H:%M:%S')}] {resultado}")
-                time.sleep(600) # Esperar 10 minutos (600 segundos)
-        except KeyboardInterrupt:
-            print("\n🛑 Vigilancia detenida.")
-    else:
-        mcp.run()
+    mcp.run()
